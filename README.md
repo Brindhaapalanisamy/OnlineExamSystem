@@ -23,8 +23,8 @@ OnlineExamSystem
 │   └── mysql-connector-j-9.5.0.jar
 ├── data
 │   └── result.txt
-├── out              (compile output → git-ku vendam)
-├── .idea            (IDE config → git-ku vendam)
+├── out              
+├── .idea            
 ├── .gitignore
 ├── README.md
 └── OnlineExamSystem.iml
