@@ -32,25 +32,27 @@ public class ResultDAO {
             e.printStackTrace();
         }
     }
-    public void deleteResultByName(String studentName) {
-        String sql = "DELETE FROM results WHERE student_name = ?";
+    public void deleteResultByName(String name) {
+        try {
+            Connection con = DBConnection.getConnection();
 
-        try (Connection con = DBConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+            String sql = "DELETE FROM results WHERE student_name = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setString(1, name.trim()); // IMPORTANT
 
-            ps.setString(1, studentName);
             int rows = ps.executeUpdate();
 
             if (rows > 0) {
                 System.out.println("Result deleted from DB");
             } else {
-                System.out.println("No record found in DB");
+                System.out.println("No result found for this name");
             }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
+
     public void viewAllResults() {
         String sql = "SELECT * FROM results";
 

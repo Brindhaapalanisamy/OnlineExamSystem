@@ -27,4 +27,3 @@ public class Question {
     public String getOptionD() { return optionD; }
     public char getCorrectOption() { return correctOption; }
 }
-

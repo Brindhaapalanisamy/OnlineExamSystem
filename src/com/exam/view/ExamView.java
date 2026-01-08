@@ -1,4 +1,4 @@
-package com.exam.view;
+ package com.exam.view;
 
 import java.util.Scanner;
 import com.exam.model.Question;

@@ -1,240 +1,200 @@
 package com.exam.controller;
 
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.Scanner;
-import java.io.FileWriter;
-import java.io.BufferedReader;
-import java.io.FileReader;
-
-import com.exam.model.Question;
-import com.exam.view.ExamView;
 import com.exam.dao.ResultDAO;
-import com.exam.model.Result;
 import com.exam.dao.QuestionDAO;
+import com.exam.model.Question;
+import com.exam.model.Result;
 
 public class ExamController {
 
+    private final String URL = "jdbc:mysql://localhost:3306/online_exam";
+    private final String USER = "root";
+    private final String PASS = "brin360!";
     private ArrayList<Question> questions = new ArrayList<>();
-    private ExamView view = new ExamView();
-    private Scanner sc = new Scanner(System.in);
     private double score = 0;
-    QuestionDAO questionDAO = new QuestionDAO();
-    ResultDAO resultDAO = new ResultDAO();
+    volatile boolean timeUp = false;
 
+    Scanner sc = new Scanner(System.in);
+    private ResultDAO resultDAO = new ResultDAO();
+    private QuestionDAO questionDAO = new QuestionDAO();
 
-    // ================= ADMIN =================
-
-    public void addQuestions() {
-        System.out.print("How many questions to add: ");
-        int n = sc.nextInt();
-        sc.nextLine();
-
-        for (int i = 1; i <= n; i++) {
-            System.out.println("\nEnter Question " + i);
-            String q = sc.nextLine();
-            String a = sc.nextLine();
-            String b = sc.nextLine();
-            String c = sc.nextLine();
-            String d = sc.nextLine();
-            char correct = sc.next().toUpperCase().charAt(0);
-            sc.nextLine();
-
-            Question ques = new Question(i, q, a, b, c, d, correct);
-            questions.add(ques);
-            questionDAO.saveQuestion(ques);
-        }
-        saveQuestionsToFile();
+    private Connection getConnection() throws Exception {
+        return DriverManager.getConnection(URL, USER, PASS);
     }
 
-    // ================= FILE: QUESTIONS =================
-
-    public void saveQuestionsToFile() {
-        try {
-            FileWriter fw = new FileWriter("data/questions.txt");
-            for (Question q : questions) {
-                fw.write(
-                        q.getQuestion() + "|" +
-                                q.getOptionA() + "|" +
-                                q.getOptionB() + "|" +
-                                q.getOptionC() + "|" +
-                                q.getOptionD() + "|" +
-                                q.getCorrectOption() + "\n"
-                );
-            }
-            fw.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void adminMenu() {
-        System.out.println("1. View Questions");
-        System.out.println("2. Delete Question");
-        System.out.println("3. Edit Question");
-
-        int ch = sc.nextInt();
-        sc.nextLine();
-
-        if (ch == 1) {
-            questions = questionDAO.getAllQuestions();
-            for (Question q : questions) {
-                System.out.println(q.getId() + ". " + q.getQuestion());
-            }
-        }
-
-        if (ch == 2) {
-            System.out.print("Enter Question ID to delete: ");
-            int id = sc.nextInt();
-            questionDAO.deleteQuestion(id);
-        }
-
-        if (ch == 3) {
-            System.out.print("Enter Question ID: ");
-            int id = sc.nextInt();
-            sc.nextLine();
-
-            System.out.print("Enter new question: ");
-            String q = sc.nextLine();
-
-            System.out.print("Enter correct option: ");
-            char c = sc.next().charAt(0);
-
-            questionDAO.updateQuestion(id, q, c);
-        }
-    }
-
-    public void loadQuestionsFromFile() {
-        try {
-            BufferedReader br = new BufferedReader(new FileReader("data/questions.txt"));
-            String line;
-            int id = 1;
-
-            while ((line = br.readLine()) != null) {
-                String[] p = line.split("\\|");
-                questions.add(new Question(
-                        id++, p[0], p[1], p[2], p[3], p[4], p[5].charAt(0)
-                ));
-            }
-            br.close();
-        } catch (Exception e) {
-            System.out.println("No questions file found");
-        }
-    }
-
-    // ================= STUDENT =================
-
+    // STUDENT
     public void startExam() {
 
         questions = questionDAO.getAllQuestions();
 
-        // loadQuestionsFromFile();   // IMPORTANT
+        if (questions.isEmpty()) {
+            System.out.println("No questions available");
+            return;
+        }
+
+        System.out.println("Exam started");
 
         System.out.print("Enter Student Name: ");
+        sc.nextLine();
         String studentName = sc.nextLine();
 
         score = 0;
 
         for (Question q : questions) {
 
-            System.out.println("\n-------------------------");
-            view.showQuestionOnly(q);   // just print question & options
+            System.out.println("\n------------------");
+            System.out.println(q.getQuestion());
+            System.out.println("A. " + q.getOptionA());
+            System.out.println("B. " + q.getOptionB());
+            System.out.println("C. " + q.getOptionC());
+            System.out.println("D. " + q.getOptionD());
 
-            startStrictTimer(10); // ⏱ 10 seconds
+            startTimer(10);   // 🔁 timer reset here
 
             char ans = 'X';
-
             long start = System.currentTimeMillis();
-            while (!timeUp && (System.currentTimeMillis() - start) < 10000) {
-                if (sc.hasNext()) {
-                    ans = sc.next().toUpperCase().charAt(0);
+
+            while (!timeUp && System.currentTimeMillis() - start < 10000) {
+
+                if (sc.hasNextLine()) {
+                    String input = sc.nextLine().trim();
+
+                    if (!input.isEmpty()) {
+                        ans = input.toUpperCase().charAt(0);
+                    }
                     break;
                 }
             }
 
+            // ⛔ STRICT: time over → ZERO MARK
+            if (timeUp) {
+                continue;
+            }
+
+            // ✅ answered within time
             if (ans == q.getCorrectOption()) {
-                score += 1;
-            } else {
-                score -= 0.25;
+                score++;
             }
+            // else → 0 mark
         }
 
-        view.showResult(score, questions.size());
+        System.out.println("\nScore: " + score + " / " + questions.size());
 
-        // ---- SAVE RESULT TO FILE ----
-        saveResultToFile(studentName, score, questions.size());
-
-        // ---- SAVE RESULT TO DATABASE ----
-        Result result = new Result(studentName, score, questions.size());
-        ResultDAO dao = new ResultDAO();
-        dao.saveResult(result);
-    }
-
-    // ================= FILE: RESULT =================
-
-    public void saveResultToFile(String studentName, double score, int total) {
-        try {
-            FileWriter fw = new FileWriter("data/result.txt", true);
-            fw.write("Name: " + studentName +
-                    " | Score: " + score +
-                    " / " + total + "\n");
-            fw.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void readResultsFromFile() {
-        try {
-            BufferedReader br = new BufferedReader(new FileReader("data/result.txt"));
-            String line;
-            System.out.println("---- Exam Results ----");
-            while ((line = br.readLine()) != null) {
-                System.out.println(line);
-            }
-            br.close();
-        } catch (Exception e) {
-            System.out.println("No results found");
-        }
+        Result r = new Result(studentName, score, questions.size());
+        resultDAO.saveResult(r);
     }
 
     public void startTimer(int seconds) {
-        try {
-            for (int i = seconds; i > 0; i--) {
-                System.out.print("\rTime left: " + i + " seconds ");
-                Thread.sleep(1000);
-            }
-            System.out.println();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-    private volatile boolean timeUp = false;
-
-    public void startStrictTimer(int seconds) {
         timeUp = false;
 
-        Thread timerThread = new Thread(() -> {
+        new Thread(() -> {
             try {
-                for (int i = seconds; i > 0; i--) {
-                    System.out.print("\rTime left: " + i + " seconds ");
+                for (int i = seconds; i >= 1; i--) {
+                    System.out.print("\rTime left: " + i + " sec ");
                     Thread.sleep(1000);
                 }
                 timeUp = true;
-                System.out.println("\nTime up! Auto skipped.");
+                System.out.println("\nTime up! Question skipped (0 mark)");
             } catch (InterruptedException e) {
-                // ignore
+                Thread.currentThread().interrupt();
             }
-        });
+        }).start();
+    }
 
-        timerThread.start();
+    // ADD QUESTION
+    public void addQuestions() {
+
+        System.out.print("How many questions to add: ");
+        int n = sc.nextInt();
+        sc.nextLine();
+
+        for (int i = 1; i <= n; i++) {
+
+            System.out.println("\nEnter Question " + i + ":");
+            String q = sc.nextLine();
+
+            System.out.print("Option A: ");
+            String a = sc.nextLine();
+
+            System.out.print("Option B: ");
+            String b = sc.nextLine();
+
+            System.out.print("Option C: ");
+            String c = sc.nextLine();
+
+            System.out.print("Option D: ");
+            String d = sc.nextLine();
+
+            System.out.print("Correct option (A/B/C/D): ");
+            char correct = sc.next().toUpperCase().charAt(0);
+            sc.nextLine();
+
+            Question ques = new Question(0, q, a, b, c, d, correct);
+            questionDAO.saveQuestion(ques);
+        }
     }
-    // ExamController.java
-    public void deleteStudentResult() {
-        System.out.print("Enter student name to delete: ");
-        String name = sc.nextLine();
-        resultDAO.deleteResultByName(name);
+
+    // VIEW QUESTIONS
+    public void viewQuestions() {
+        try (Connection con = getConnection()) {
+            Statement st = con.createStatement();
+            ResultSet rs = st.executeQuery("SELECT * FROM questions");
+
+            while (rs.next()) {
+                System.out.println(
+                        rs.getInt("id") + ". " + rs.getString("question"));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
+
+    // EDIT QUESTION
+    public void editQuestion() {
+
+        System.out.print("Enter Question ID to edit: ");
+        int id = sc.nextInt();
+        sc.nextLine();
+
+        System.out.print("Enter new question: ");
+        String q = sc.nextLine();
+
+        System.out.print("Enter new correct option (A/B/C/D): ");
+        char c = sc.next().toUpperCase().charAt(0);
+
+        questionDAO.updateQuestion(id, q, c);
+    }
+
+    // DELETE QUESTION
+    public void deleteQuestion() {
+        try (Connection con = getConnection()) {
+            System.out.print("Enter question ID: ");
+            int id = sc.nextInt();
+
+            PreparedStatement ps =
+                    con.prepareStatement("DELETE FROM questions WHERE id=?");
+            ps.setInt(1, id);
+            ps.executeUpdate();
+
+            System.out.println("Question deleted");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public void viewResults() {
         resultDAO.viewAllResults();
     }
+
+    public void deleteResult() {
+        System.out.print("Enter Student Name to delete result: ");
+        sc.nextLine(); // 🔥 VERY IMPORTANT
+        String name = sc.nextLine();
+
+        resultDAO.deleteResultByName(name);
+    }
+
 }

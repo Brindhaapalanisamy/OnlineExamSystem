@@ -30,11 +30,11 @@ public class QuestionDAO {
 
     public ArrayList<Question> getAllQuestions() {
         ArrayList<Question> list = new ArrayList<>();
-
         try {
             Connection con = DBConnection.getConnection();
-            Statement st = con.createStatement();
-            ResultSet rs = st.executeQuery("SELECT * FROM questions");
+            String sql = "SELECT * FROM questions";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
                 list.add(new Question(
@@ -47,11 +47,9 @@ public class QuestionDAO {
                         rs.getString("correct_option").charAt(0)
                 ));
             }
-            con.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
-
         return list;
     }
 
@@ -72,17 +70,13 @@ public class QuestionDAO {
     public void updateQuestion(int id, String question, char correct) {
         try {
             Connection con = DBConnection.getConnection();
-            PreparedStatement ps =
-                    con.prepareStatement(
-                             "UPDATE questions SET question = ?, correct_option = ? WHERE id = ?");
-
+            String sql =
+                    "UPDATE questions SET question=?, correct_option=? WHERE id=?";
+            PreparedStatement ps = con.prepareStatement(sql);
             ps.setString(1, question);
             ps.setString(2, String.valueOf(correct));
             ps.setInt(3, id);
-
             ps.executeUpdate();
-            con.close();
-            System.out.println("Question updated");
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -104,4 +98,3 @@ public class QuestionDAO {
         return exists;
     }
 }
-
